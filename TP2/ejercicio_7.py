@@ -16,12 +16,8 @@ def intercalar(lista1: List[int], lista2: List[int]) -> None:
 
     Post: No retorna nada, modifica la primera lista recibida.
     """
-    for i, elem in enumerate(lista2):
-        pos = 2 * i + 1  # índice donde va a insertarse
-        if pos > len(lista1):
-            lista1.append(elem)   # si el índice se pasa, agrego al final
-        else:
-            lista1.insert(pos, elem)
+    for i in range(1, len(lista2)*2, 2):
+        lista1[i:i] = lista2[(i-1)//2:(i-1)//2 + 1]
 
 
 def main():
