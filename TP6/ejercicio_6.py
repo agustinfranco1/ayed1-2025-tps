@@ -30,6 +30,11 @@ from typing import List, Dict, Tuple
 from datetime import datetime
 
 
+import os
+from typing import List, Dict, Tuple
+from datetime import datetime
+
+
 def fecha_valida(fecha: str) -> bool:
     """
     Verifica si una fecha esta en formato DDMMAAAA.
@@ -47,7 +52,7 @@ def fecha_valida(fecha: str) -> bool:
 
 def dias_entre(f1: str, f2: str) -> int:
     """
-    Devuelve la diferencia en días entre dos fechas.
+    Devuelve la diferencia en dias entre dos fechas.
 
     Pre: recibe dos strings correspondientes a fechas en formato DDMMAAAA.
 
@@ -56,6 +61,38 @@ def dias_entre(f1: str, f2: str) -> int:
     d1 = datetime.strptime(f1, "%d%m%Y")
     d2 = datetime.strptime(f2, "%d%m%Y")
     return (d2 - d1).days
+
+
+def escribir_fila_csv(archivo, fila: List) -> None:
+    """
+    Escribe una fila en formato CSV sin usar el modulo csv.
+
+    Pre: archivo debe estar abierto en modo escritura. fila debe ser una lista de valores convertibles a string.
+
+    Post: escribe una linea en el archivo con los valores separados por coma.
+    """
+    linea = ",".join(str(x) for x in fila)
+    archivo.write(linea + "\n")
+
+
+def leer_csv(ruta: str) -> List[List[str]]:
+    """
+    Lee un archivo CSV sin usar el modulo csv.
+
+    Pre: ruta debe apuntar a un archivo CSV valido con separacion por comas.
+
+    Post: devuelve una lista de listas con los campos de cada fila, sin incluir la cabecera.
+    """
+    registros = []
+    with open(ruta, "rt", encoding="utf-8") as f:
+        lineas = f.readlines()
+
+    for linea in lineas[1:]:  # saltar cabecera
+        linea = linea.strip()
+        if linea:
+            registros.append(linea.split(","))
+
+    return registros
 
 
 def registrar_huespedes(nombre_csv: str) -> None:
@@ -72,9 +109,8 @@ def registrar_huespedes(nombre_csv: str) -> None:
 
     print("Ingrese DNI, -1 para finalizar.")
 
-    with open(ruta, "wt", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(["DNI", "Nombre", "Ingreso", "Egreso", "Ocupantes"])
+    with open(ruta, "wt", encoding="utf-8") as f:
+        escribir_fila_csv(f, ["DNI", "Nombre", "Ingreso", "Egreso", "Ocupantes"])
 
         while True:
             try:
@@ -104,16 +140,16 @@ def registrar_huespedes(nombre_csv: str) -> None:
                     print("Debe haber al menos 1 ocupante.")
                     continue
 
-                writer.writerow([dni, nombre, ingreso, egreso, ocupantes])
+                escribir_fila_csv(f, [dni, nombre, ingreso, egreso, ocupantes])
                 dnis_registrados.add(dni)
 
             except ValueError:
-                print("Error: Ingrese valores validos.")
+                print("Error: ingrese valores validos.")
 
     print("Registro finalizado. Archivo generado:", nombre_csv)
 
 
-def asignar_habitaciones(huespedes: List[List[str]]) -> Dict[str, Tuple[int]]:
+def asignar_habitaciones(huespedes: List[List[str]]) -> Dict[str, Tuple[int, int]]:
     """
     Asigna habitaciones automaticamente a los huespedes.
 
@@ -124,11 +160,10 @@ def asignar_habitaciones(huespedes: List[List[str]]) -> Dict[str, Tuple[int]]:
     asignaciones = {}
     hab_usadas = set()
 
-    for registro in huespedes:
-        dni = registro[0]
-
-        for piso in range(1, 11):        
-            for hab in range(1, 7):     
+    for reg in huespedes:
+        dni = reg[0]
+        for piso in range(1, 11):
+            for hab in range(1, 7):
                 if (piso, hab) not in hab_usadas:
                     hab_usadas.add((piso, hab))
                     asignaciones[dni] = (piso, hab)
@@ -172,33 +207,35 @@ def piso_con_mas_personas(huespedes: List[List[str]], asignaciones: Dict[str, Tu
 
     Post: devuelve entero entre 1 y 10 segun el piso que tenga mayor cantidad de huespedes.
     """
-    personas_por_piso = [0] * 11
+    personas = [0] * 11
 
-    for registro in huespedes:
-        dni, _, _, _, ocupantes = registro
+    for reg in huespedes:
+        dni = reg[0]
+        ocupantes = int(reg[4])
         piso, _ = asignaciones[dni]
-        personas_por_piso[piso] += int(ocupantes)
+        personas[piso] += ocupantes
 
-    return personas_por_piso.index(max(personas_por_piso))
+    return personas.index(max(personas))
 
 
-def proximas_a_desocuparse(huespedes: List[List[str]], asignaciones: Dict[str, Tuple[int]], fecha_actual: str) -> List[Tuple[int, str]]:
+def proximas_a_desocuparse(huespedes: List[List[str]], asignaciones: Dict[str, Tuple[int]], fecha_actual: str):
     """
     Genera una lista de proximas habitaciones a desocuparse en orden cronologico.
 
     Pre: fecha_actual debe estar en formato valido y tanto huespedes como asignaciones deben tener contenido.
 
-    Post: devuelve lista de tuplas correspondientes al piso, hab, fecha egreso.
+    Post: devuelve lista de tuplas correspondientes a piso, habitacion y fecha de egreso.
     """
     resultado = []
+
     for dni, (piso, hab) in asignaciones.items():
         for reg in huespedes:
             if reg[0] == dni:
                 egreso = reg[3]
                 if egreso >= fecha_actual:
                     resultado.append((piso, hab, egreso))
-    resultado.sort(key=lambda x: x[2])
-    return resultado
+
+    return sorted(resultado, key=lambda x: x[2])
 
 
 def ordenar_por_dias(huespedes: List[List[str]]) -> List[Tuple[str, int]]:
@@ -207,15 +244,15 @@ def ordenar_por_dias(huespedes: List[List[str]]) -> List[Tuple[str, int]]:
 
     Pre: huespedes debe contener registros validos.
 
-    Post: devuelve lista [(Nombre, dias)]
+    Post: devuelve lista [(nombre, dias)] ordenada de mayor a menor.
     """
-    lista = []
-    for registro in huespedes:
-        nombre = registro[1]
-        dias = dias_entre(registro[2], registro[3])
-        lista.append((nombre, dias))
+    datos = []
+    for reg in huespedes:
+        nombre = reg[1]
+        dias = dias_entre(reg[2], reg[3])
+        datos.append((nombre, dias))
 
-    return sorted(lista, key=lambda x: x[1], reverse=True)
+    return sorted(datos, key=lambda x: x[1], reverse=True)
 
 
 def main():
@@ -228,7 +265,7 @@ def main():
         print("3. Salir")
 
         try:
-            opcion = int(input("Opción: "))
+            opcion = int(input("Opcion: "))
 
             if opcion == 1:
                 registrar_huespedes(nombre_csv)
@@ -238,28 +275,22 @@ def main():
                     print("Primero debe registrar huespedes.")
                     continue
 
-                with open(ruta, "rt", encoding="utf-8") as f:
-                    reader = csv.reader(f)
-                    next(reader)
-                    huespedes = list(reader)
-
+                huespedes = leer_csv(ruta)
                 asignaciones = asignar_habitaciones(huespedes)
 
-                print("\na) Piso mas ocupado:", piso_mas_ocupado(asignaciones))
-                print("b) Habitaciones vacias:", habitaciones_vacias(asignaciones))
-                print("c) Piso con mas personas:",
-                      piso_con_mas_personas(huespedes, asignaciones))
+                print("\nPiso mas ocupado:", piso_mas_ocupado(asignaciones))
+                print("Habitaciones vacias:", habitaciones_vacias(asignaciones))
+                print("Piso con mas personas:", piso_con_mas_personas(huespedes, asignaciones))
 
                 fecha_actual = input("Ingrese fecha actual (DDMMAAAA): ").strip()
-                if not fecha_valida(fecha_actual):
-                    print("Fecha invalida.")
+                if fecha_valida(fecha_actual):
+                    print("\nProximas habitaciones en desocuparse:")
+                    for piso, hab, egreso in proximas_a_desocuparse(huespedes, asignaciones, fecha_actual):
+                        print(f"  Piso {piso}, Habitacion {hab}, Egreso: {egreso}")
                 else:
-                    print("\nd) Proximas habitaciones en desocuparse:")
-                    for piso, hab, egreso in proximas_a_desocuparse(
-                            huespedes, asignaciones, fecha_actual):
-                        print(f"  Piso {piso}, Hab {hab}, Egreso: {egreso}")
+                    print("Fecha invalida.")
 
-                print("\ne) Listado por dias de alojamiento:")
+                print("\nListado por dias de alojamiento:")
                 for nombre, dias in ordenar_por_dias(huespedes):
                     print(f"  {nombre}: {dias} dias")
 
